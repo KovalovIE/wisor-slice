@@ -1,0 +1,28 @@
+{
+  "description": "wisor-slice: docs-sync (Stop) and probe-guard (PreToolUse Bash). Both are no-ops outside the wisor repo.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/docs-sync.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/probe-guard.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

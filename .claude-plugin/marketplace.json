@@ -1,0 +1,17 @@
+{
+  "name": "wisor-tools",
+  "description": "Claude Code plugins for the wisor personal finance tracker.",
+  "owner": {
+    "name": "Ihor Kovalov",
+    "url": "https://github.com/KovalovIE"
+  },
+  "plugins": [
+    {
+      "name": "wisor-slice",
+      "source": "./",
+      "description": "Scaffold, test and ship a CRUD vertical slice (DB → API → web screen) in the wisor monorepo.",
+      "category": "development",
+      "tags": ["scaffold", "crud", "clean-architecture", "react"]
+    }
+  ]
+}
