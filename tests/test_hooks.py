@@ -135,6 +135,48 @@ class DocsSyncTest(HookTestCase):
         self.assertIsNone(self.stop())
 
 
+class DocsSyncF1ReplayTest(HookTestCase):
+    """Moments from wisor's F1, where CLAUDE.md already had uncommitted edits from an earlier step."""
+
+    UNRELATED_CLAUDE_MD_EDIT = "\n### Конвенції CRUD-ендпоінтів\n- PATCH: відсутнє поле не змінюється; `{}` → 400.\n"
+
+    def stop(self):
+        return run_hook("docs-sync.py", {"hook_event_name": "Stop", "stop_hook_active": False},
+                        self.root, self.data_dir)
+
+    def test_p5_http_error_blocks_although_claude_md_has_unrelated_edits(self):
+        write(self.root, "CLAUDE.md", self.UNRELATED_CLAUDE_MD_EDIT)
+        write(self.root, "apps/api/src/presentation/http/http-error.ts")
+        out = self.stop()
+        self.assertIn("R1", out["reason"])
+        self.assertIn("http-error.ts", out["reason"])
+
+    def test_p5_passes_once_claude_md_names_http_error(self):
+        write(self.root, "CLAUDE.md", self.UNRELATED_CLAUDE_MD_EDIT + "- `HttpError` (presentation) → 400/404.\n")
+        write(self.root, "apps/api/src/presentation/http/http-error.ts")
+        self.assertIsNone(self.stop())
+
+    def test_new_adr_naming_the_file_counts_as_documented(self):
+        write(self.root, "docs/adr/0004-presentation-http-errors.md", "# ADR-0004\n`http-error.ts` maps …\n")
+        write(self.root, "apps/api/src/presentation/http/http-error.ts")
+        self.assertIsNone(self.stop())
+
+    def test_p9_budget_blocks_although_claude_md_has_unrelated_edits(self):
+        write(self.root, "CLAUDE.md", self.UNRELATED_CLAUDE_MD_EDIT + "- monthlyBudget is optional\n")
+        write(self.root, "apps/web/src/features/categorization/categories-page/hooks/budget.ts")
+        out = self.stop()
+        self.assertIn("R2", out["reason"])
+        self.assertIn("budget.ts", out["reason"])
+
+    def test_only_unmentioned_files_are_reported(self):
+        write(self.root, "CLAUDE.md", "- `HttpError` …\n")
+        write(self.root, "apps/api/src/presentation/http/http-error.ts")
+        write(self.root, "apps/web/src/shared/api/api-error.ts")
+        reason = self.stop()["reason"]
+        self.assertIn("api-error.ts", reason)
+        self.assertNotIn("http-error.ts", reason)
+
+
 class ProbeGuardTest(HookTestCase):
     def bash(self, command, **extra):
         payload = dict({"hook_event_name": "PreToolUse", "tool_name": "Bash",
@@ -176,6 +218,36 @@ class ProbeGuardTest(HookTestCase):
     def test_outside_wisor_is_noop(self):
         shutil.rmtree(os.path.join(self.root, "apps/web"))
         self.assertIsNone(self.bash("npx tsx /tmp/probe.ts"))
+
+    def test_path_in_a_variable(self):
+        self.assert_denied(self.bash('S="/tmp/x/scratch" && npx tsx ${S}/probe.ts'), "throwaway script")
+        self.assert_denied(self.bash("export T=/tmp/a; B=$T/b; node $B/run.mjs"), "throwaway script")
+
+    def test_b2_tsc_on_mts_and_cts(self):
+        self.assert_denied(self.bash("npx tsc --noEmit src/a.mts"), "single files")
+        self.assert_denied(self.bash("npx tsc --noEmit src/a.cts"), "single files")
+
+
+class ProbeGuardF1ReplayTest(HookTestCase):
+    """Verbatim Bash commands from wisor's F1 session (user name and session id replaced)."""
+
+    FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "f1_probe_commands.json")
+
+    def test_every_f1_command(self):
+        with open(self.FIXTURES, encoding="utf-8") as f:
+            cases = json.load(f)
+        for case in cases:
+            with self.subTest(step=case["step"]):
+                payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash",
+                           "tool_input": {"command": case["command"]}}
+                out = run_hook("probe-guard.py", payload, self.root, self.data_dir)
+                if case["expect"] is None:
+                    self.assertIsNone(out)
+                else:
+                    self.assertIsNotNone(out, "not blocked")
+                    reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+                    expected = "throwaway script" if case["expect"] == "B1" else "single files"
+                    self.assertIn(expected, reason)
 
 
 if __name__ == "__main__":

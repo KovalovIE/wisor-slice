@@ -8,12 +8,18 @@ Every rule comes from a `REPEAT docs` line in wisor's LOG.md (F1), where the use
   R2  file outside the documented slice structure (e.g. hooks/budget.ts that isn't a hook) → CLAUDE.md
   R3  a backend DTO changed but its web mirror features/*/types.ts did not (CLAUDE.md «apps/web»)
 
+R1/R2 count a file as documented only when text *added* to CLAUDE.md, ARCHITECTURE.md or docs/adr/
+in the uncommitted changes names that file (`http-error.ts`, `http-error` or `HttpError`). "Some doc
+changed" is not enough: skills don't commit between steps, so an unrelated CLAUDE.md edit from an
+earlier step would otherwise silence the hook for the rest of the feature (that is how F1's P5 slipped).
+
 Blocks once per stop: when Claude Code is already continuing because of this hook
 (`stop_hook_active`), it lets the turn end, so a "no doc change needed" answer is possible.
 """
 import json
 import os
 import re
+import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -48,6 +54,46 @@ TEST_FILE = re.compile(r"\.test\.tsx?$")
 
 def is_doc(path):
     return path in ("CLAUDE.md", "ARCHITECTURE.md") or path.startswith("docs/adr/")
+
+
+def added_doc_text(root, changes):
+    """Lines added to docs in the uncommitted changes: '+' lines of modified docs, whole new docs."""
+    modified = [p for s, p in changes if s == "modified" and is_doc(p)]
+    new = [p for s, p in changes if s == "added" and is_doc(p)]
+    chunks = []
+    if modified:
+        try:
+            diff = subprocess.run(
+                ["git", "-C", root, "diff", "-U0", "HEAD", "--"] + modified,
+                capture_output=True, text=True, timeout=10, check=True,
+            ).stdout
+            chunks += [line[1:] for line in diff.splitlines() if line.startswith("+") and not line.startswith("+++")]
+        except Exception:
+            pass
+    for p in new:
+        try:
+            with open(os.path.join(root, p), encoding="utf-8") as f:
+                chunks.append(f.read())
+        except OSError:
+            continue
+    return "\n".join(chunks)
+
+
+def mention_tokens(path):
+    """Names a doc may use for a file: `http-error.ts`, `http-error`, `HttpError`. A one-word stem
+    (`budget.ts`) needs the file name itself — the bare word is too common to count."""
+    base = os.path.basename(path)
+    parts = base.split(".")[0].split("-")
+    tokens = [base]
+    if len(parts) > 1:
+        tokens += ["-".join(parts), "".join(p.capitalize() for p in parts)]
+    return tokens
+
+
+def is_documented(path, doc_text):
+    return any(
+        re.search(r"(?<![\w-])" + re.escape(token) + r"(?![\w-])", doc_text) for token in mention_tokens(path)
+    )
 
 
 def check_shared_blocks(added):
@@ -116,13 +162,12 @@ def main():
 
     changes = changed_files(root)
     changed = {p for _, p in changes}
-    added = [p for s, p in changes if s == "added"]
     modified = [p for s, p in changes if s == "modified"]
-    docs_touched = any(is_doc(p) for p in changed)
+    doc_text = added_doc_text(root, changes)
+    undocumented = [p for s, p in changes if s == "added" and not is_doc(p) and not is_documented(p, doc_text)]
 
-    problems = check_dto_mirrors(root, modified, changed)
-    if not docs_touched:
-        problems = check_shared_blocks(added) + check_slice_structure(added) + problems
+    problems = check_shared_blocks(undocumented) + check_slice_structure(undocumented)
+    problems += check_dto_mirrors(root, modified, changed)
     if not problems:
         return 0
 

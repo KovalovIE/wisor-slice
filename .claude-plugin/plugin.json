@@ -1,6 +1,6 @@
 {
   "name": "wisor-slice",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Vertical-slice tooling for the wisor monorepo: scaffold a CRUD entity end-to-end (Postgres migration → Clean Architecture layers → REST → React screen), ship it through format/lint/test, and keep docs in sync.",
   "author": {
     "name": "Ihor Kovalov",

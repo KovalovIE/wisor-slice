@@ -20,7 +20,7 @@ file before writing its counterpart.
 
 | File (new entity) | Reference |
 |---|---|
-| `features/<bc>/types.ts` — mirror of the backend DTO. **First line names the DTO file** (`Mirrors … dto/<entity>.dto.ts`): the `docs-sync` hook uses it to catch drift | `features/categorization/types.ts` |
+| `features/<bc>/types.ts` — mirror of the backend DTO. **The header comment names the DTO file** (`Mirrors … dto/<entity>.dto.ts`): the `docs-sync` hook finds the mirror by that name to catch drift | `features/categorization/types.ts` |
 | `features/<bc>/api.ts` — `baseApi.enhanceEndpoints({ addTagTypes: ['<Entity>'] }).injectEndpoints(...)`: list/get/create/update/delete, `LIST` + per-id tags, mutations invalidate only on success | `features/categorization/api.ts` |
 | `<entities>-page/index.tsx` — dumb component: no state, no computation | `categories-page/index.tsx` |
 | `<entities>-page/hooks/use-<entities>-page.ts` — main hook: list, delete, composes the form hook | `hooks/use-categories-page.ts` |
